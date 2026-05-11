@@ -1,0 +1,1471 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>云聊 - AI对话客户端</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --primary: #2196f3;
+  --bg: #f5f5f5;
+  --surface: #ffffff;
+  --text: #333333;
+  --border: #e0e0e0;
+}
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  background: var(--bg); height: 100vh; height: 100dvh; overflow: hidden; color: var(--text);
+}
+
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes typing { 0%, 60%, 100% { transform: translateY(0); } 30% { transform: translateY(-5px); } }
+@keyframes heartBeat { 0%, 100% { transform: scale(1); } 14% { transform: scale(1.3); } 28% { transform: scale(1); } 42% { transform: scale(1.3); } }
+@keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+@keyframes moodFloat { 0%, 100% { transform: translateY(0) rotate(0deg); } 25% { transform: translateY(-2px) rotate(2deg); } 75% { transform: translateY(2px) rotate(-2deg); } }
+
+#splash-screen { position: fixed; inset: 0; z-index: 9999; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; flex-direction: column; align-items: center; justify-content: center; transition: opacity 0.6s ease; }
+#splash-screen.hidden { opacity: 0; pointer-events: none; }
+.splash-logo { width: 100px; height: 100px; background: white; border-radius: 28px; display: flex; align-items: center; justify-content: center; font-size: 48px; margin-bottom: 20px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); animation: float 3s ease-in-out infinite; }
+.splash-title { color: white; font-size: 28px; font-weight: 700; letter-spacing: 2px; }
+.splash-subtitle { color: rgba(255,255,255,0.7); font-size: 14px; margin-top: 8px; }
+
+.modal-overlay { position: fixed; inset: 0; z-index: 2000; background: rgba(0,0,0,0.5); display: flex; align-items: flex-end; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.3s; }
+.modal-overlay.active { opacity: 1; pointer-events: all; }
+.modal-content { background: white; width: 100%; max-width: 420px; border-radius: 24px 24px 0 0; padding: 24px 20px calc(24px + var(--safe-bottom)); transform: translateY(100%); transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.modal-overlay.active .modal-content { transform: translateY(0); }
+.modal-header { text-align: center; margin-bottom: 20px; }
+.modal-header h2 { font-size: 20px; font-weight: 600; }
+.modal-header p { font-size: 13px; color: #999; margin-top: 4px; }
+
+.mode-card { display: flex; align-items: center; padding: 16px; border-radius: 16px; margin-bottom: 12px; cursor: pointer; transition: all 0.2s; border: 2px solid transparent; }
+.mode-card:hover { transform: translateX(4px); }
+.mode-card.assistant { background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%); }
+.mode-card.assistant:hover, .mode-card.assistant.selected { border-color: #2196f3; }
+.mode-card.roleplay { background: linear-gradient(135deg, #f3e5f5 0%, #e1bee7 100%); }
+.mode-card.roleplay:hover, .mode-card.roleplay.selected { border-color: #9c27b0; }
+.mode-icon { width: 48px; height: 48px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 24px; margin-right: 14px; }
+.mode-card.assistant .mode-icon { background: #2196f3; }
+.mode-card.roleplay .mode-icon { background: #9c27b0; }
+.mode-info h3 { font-size: 16px; font-weight: 600; }
+.mode-info p { font-size: 12px; color: #666; margin-top: 2px; }
+
+.app-container { height: 100vh; height: 100dvh; display: flex; flex-direction: column; position: relative; }
+
+.sidebar-overlay { position: fixed; inset: 0; z-index: 900; background: rgba(0,0,0,0.4); opacity: 0; pointer-events: none; transition: opacity 0.3s; }
+.sidebar-overlay.active { opacity: 1; pointer-events: all; }
+.sidebar { position: fixed; left: 0; top: 0; bottom: 0; width: 280px; max-width: 80vw; background: var(--surface); z-index: 901; transform: translateX(-100%); transition: transform 0.3s ease; display: flex; flex-direction: column; box-shadow: 2px 0 12px rgba(0,0,0,0.15); }
+.sidebar.active { transform: translateX(0); }
+.sidebar-header { padding: calc(16px + var(--safe-top)) 16px 12px; border-bottom: 1px solid var(--border); }
+.sidebar-title { font-size: 18px; font-weight: 700; color: var(--primary); }
+.new-chat-btn { margin: 12px 16px; padding: 10px 16px; border-radius: 10px; border: 1px dashed var(--primary); background: transparent; color: var(--primary); font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s; }
+.new-chat-btn:hover { background: var(--primary); color: white; }
+.chat-list { flex: 1; overflow-y: auto; padding: 0 12px; }
+.chat-item { padding: 12px; border-radius: 10px; margin-bottom: 4px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; transition: all 0.2s; position: relative; }
+.chat-item:hover { background: #f0f4f8; }
+.chat-item.active { background: #e3f2fd; border-left: 3px solid var(--primary); }
+.chat-item-text { flex: 1; overflow: hidden; }
+.chat-item-title { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chat-item-time { font-size: 11px; color: #999; margin-top: 2px; }
+.chat-item-actions { display: flex; gap: 4px; opacity: 0; transition: opacity 0.2s; }
+.chat-item:hover .chat-item-actions { opacity: 1; }
+.chat-action { width: 28px; height: 28px; border-radius: 6px; border: none; background: transparent; cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; }
+.chat-action:hover { background: rgba(0,0,0,0.05); }
+.chat-action.delete { color: #f44336; }
+.sidebar-footer { padding: 12px 16px calc(12px + var(--safe-bottom)); border-top: 1px solid var(--border); font-size: 12px; color: #999; text-align: center; }
+
+.header { padding: calc(10px + var(--safe-top)) 12px 10px; display: flex; align-items: center; justify-content: space-between; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); position: relative; z-index: 100; min-height: 52px; }
+.header.assistant-theme { background: rgba(33,150,243,0.92); color: white; }
+.header.roleplay-theme { background: rgba(156,39,176,0.92); color: white; }
+
+.header-left { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+.menu-btn, .back-btn { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; background: rgba(255,255,255,0.15); font-size: 18px; border: none; color: inherit; flex-shrink: 0; }
+.avatar { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; background: white; position: relative; flex-shrink: 0; }
+.avatar .status-dot { position: absolute; bottom: 0; right: 0; width: 10px; height: 10px; border-radius: 50%; border: 2px solid white; }
+.avatar .status-dot.online { background: #4caf50; }
+.avatar .status-dot.sleeping { background: #673ab7; }
+.header-info { min-width: 0; }
+.header-info h3 { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.header-info .status-text { font-size: 11px; opacity: 0.85; display: flex; align-items: center; gap: 4px; margin-top: 1px; }
+.typing-dots { display: none; }
+.typing-dots.active { display: flex; gap: 3px; }
+.typing-dots span { width: 4px; height: 4px; background: currentColor; border-radius: 50%; animation: typing 1.4s infinite; }
+.typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+.mood-indicator { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; padding: 1px 6px; border-radius: 8px; background: rgba(255,255,255,0.2); animation: moodFloat 3s ease-in-out infinite; }
+
+.header-right { display: flex; gap: 4px; flex-shrink: 0; }
+.header-btn { width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; background: rgba(255,255,255,0.15); font-size: 16px; border: none; color: inherit; }
+
+.intimacy-bar { padding: 5px 16px; display: flex; align-items: center; gap: 8px; font-size: 11px; transition: all 0.3s; }
+.header.assistant-theme + .intimacy-bar { background: rgba(33,150,243,0.08); color: #1976d2; }
+.header.roleplay-theme + .intimacy-bar { background: rgba(156,39,176,0.08); color: #7b1fa2; }
+.intimacy-progress { flex: 1; height: 5px; background: rgba(0,0,0,0.08); border-radius: 3px; overflow: hidden; }
+.intimacy-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; background: linear-gradient(90deg, #ff6b6b, #feca57, #48dbfb, #ff9ff3, #54a0ff); background-size: 200% 100%; }
+.intimacy-level { font-weight: 700; white-space: nowrap; font-size: 11px; }
+
+.chat-area { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 12px 14px; scroll-behavior: smooth; -webkit-overflow-scrolling: touch; }
+.chat-area.assistant-theme { background: #f8fafc; }
+.chat-area.roleplay-theme { background: linear-gradient(180deg, #faf5ff 0%, #f5f0ff 100%); }
+
+.date-divider { text-align: center; margin: 14px 0; font-size: 11px; color: #aaa; font-weight: 500; }
+
+.message-row { display: flex; margin-bottom: 14px; animation: fadeIn 0.3s ease; position: relative; }
+.message-row.user { justify-content: flex-end; }
+.message-row.ai { justify-content: flex-start; }
+.message-row:hover .message-actions { opacity: 1; }
+
+.message-avatar { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; margin: 0 6px; align-self: flex-end; }
+.message-row.user .message-avatar { order: 2; background: #e3f2fd; }
+.message-row.ai .message-avatar { background: #f3e5f5; }
+
+.message-content { max-width: 75%; position: relative; }
+.message-bubble { padding: 9px 13px; border-radius: 16px; font-size: 14.5px; line-height: 1.6; word-break: break-word; position: relative; }
+.message-row.user .message-bubble { background: var(--primary); color: white; border-bottom-right-radius: 4px; }
+.message-row.ai .message-bubble { background: #e8f5e9; color: #1b5e20; border-bottom-left-radius: 4px; }
+.message-row.ai .message-bubble.assistant-bubble { background: white; color: #333; border: 1px solid var(--border); box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+
+.message-time { font-size: 10px; color: #bbb; margin-top: 3px; display: flex; align-items: center; gap: 3px; }
+.message-row.user .message-time { justify-content: flex-end; }
+.read-status { font-size: 10px; }
+.read-status.read { color: #81c784; }
+
+.message-actions { position: absolute; top: -8px; right: -4px; display: flex; gap: 2px; opacity: 0; transition: opacity 0.2s; background: rgba(255,255,255,0.9); border-radius: 8px; padding: 2px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+.message-row.user .message-actions { right: auto; left: -4px; }
+.msg-action { width: 24px; height: 24px; border-radius: 6px; border: none; background: transparent; cursor: pointer; font-size: 12px; display: flex; align-items: center; justify-content: center; color: #666; }
+.msg-action:hover { background: #f0f0f0; }
+
+.system-message { text-align: center; padding: 6px 14px; margin: 6px 0; background: rgba(0,0,0,0.03); border-radius: 10px; font-size: 11px; color: #888; animation: fadeIn 0.5s ease; }
+.system-message.offline-event { background: linear-gradient(90deg, #fff3e0, #fce4ec); color: #e65100; border: 1px dashed #ffcc80; }
+.system-message.memory-trigger { background: linear-gradient(90deg, #e8f5e9, #e3f2fd); color: #2e7d32; border: 1px solid #a5d6a7; }
+.system-message.intimacy-up { background: linear-gradient(90deg, #fce4ec, #f3e5f5); color: #c2185b; border: 1px solid #f48fb1; font-weight: 600; }
+
+.edit-box { width: 100%; padding: 8px; border: 1px solid var(--primary); border-radius: 8px; font-size: 14px; font-family: inherit; resize: vertical; min-height: 60px; outline: none; }
+
+.input-area { padding: 8px 12px calc(10px + var(--safe-bottom)); background: white; border-top: 1px solid var(--border); display: flex; align-items: flex-end; gap: 6px; }
+.input-tools { display: flex; gap: 3px; }
+.tool-btn { width: 36px; height: 36px; border-radius: 50%; border: none; background: #f5f5f5; font-size: 18px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #666; }
+.input-box { flex: 1; min-height: 38px; max-height: 120px; padding: 9px 14px; border-radius: 18px; border: 1px solid var(--border); outline: none; font-size: 15px; line-height: 1.4; resize: none; font-family: inherit; }
+.input-box:focus { border-color: var(--primary); }
+.send-btn { width: 36px; height: 36px; border-radius: 50%; border: none; background: var(--primary); color: white; font-size: 16px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; flex-shrink: 0; }
+.send-btn:active { transform: scale(0.92); }
+.send-btn:disabled { background: #ccc; }
+
+.settings-modal .modal-content { max-height: 85vh; overflow-y: auto; }
+.settings-group { margin-bottom: 20px; }
+.settings-group h4 { font-size: 13px; color: #999; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+.setting-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f5f5f5; }
+.setting-row:last-child { border-bottom: none; }
+.setting-info { flex: 1; }
+.setting-name { font-size: 14px; font-weight: 500; }
+.setting-desc { font-size: 12px; color: #999; margin-top: 2px; }
+.setting-control { display: flex; align-items: center; gap: 8px; }
+.switch { width: 46px; height: 26px; border-radius: 13px; background: #ccc; position: relative; cursor: pointer; transition: 0.3s; }
+.switch.on { background: var(--primary); }
+.switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 22px; height: 22px; border-radius: 50%; background: white; transition: 0.3s; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+.switch.on::after { left: 22px; }
+select, input[type="text"], input[type="password"], input[type="number"] {
+  padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; font-family: inherit; outline: none; min-width: 140px;
+}
+select:focus, input:focus { border-color: var(--primary); }
+.temp-slider { display: flex; align-items: center; gap: 8px; }
+.temp-value { font-size: 14px; font-weight: 600; color: var(--primary); min-width: 36px; text-align: right; }
+
+.role-select-page { position: fixed; inset: 0; z-index: 1000; background: var(--bg); display: none; flex-direction: column; }
+.role-select-page.active { display: flex; }
+.role-grid { flex: 1; overflow-y: auto; padding: 16px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.role-card { background: white; border-radius: 16px; padding: 16px; text-align: center; cursor: pointer; transition: all 0.2s; border: 2px solid transparent; position: relative; }
+.role-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+.role-card.selected { border-color: #9c27b0; }
+.role-card .role-avatar { width: 60px; height: 60px; border-radius: 50%; margin: 0 auto 10px; font-size: 30px; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #f3e5f5, #e1bee7); }
+.role-card h4 { font-size: 15px; font-weight: 600; }
+.role-card p { font-size: 12px; color: #888; margin-top: 4px; }
+.role-card .intimacy-badge { position: absolute; top: 8px; right: 8px; background: linear-gradient(135deg, #ff6b6b, #feca57); color: white; font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: 700; }
+.fab { position: fixed; bottom: calc(20px + var(--safe-bottom)); right: 16px; width: 52px; height: 52px; border-radius: 50%; background: linear-gradient(135deg, #9c27b0, #e91e63); color: white; border: none; font-size: 22px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 16px rgba(156,39,176,0.4); cursor: pointer; z-index: 500; }
+
+.memory-page { position: fixed; inset: 0; z-index: 1000; background: var(--bg); display: none; flex-direction: column; }
+.memory-page.active { display: flex; }
+.memory-content { flex: 1; overflow-y: auto; padding: 16px; }
+.memory-section { background: white; border-radius: 16px; margin-bottom: 14px; padding: 16px; }
+.memory-section h3 { font-size: 15px; font-weight: 600; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+.memory-tag { display: inline-block; padding: 3px 10px; border-radius: 10px; font-size: 12px; margin: 3px; }
+.memory-tag.fact { background: #e3f2fd; color: #1976d2; }
+.memory-tag.preference { background: #f3e5f5; color: #7b1fa2; }
+.memory-tag.emotion { background: #fff3e0; color: #e65100; }
+.memory-tag.secret { background: #fce4ec; color: #c2185b; }
+.memory-entry { padding: 8px 0; border-bottom: 1px solid #f5f5f5; font-size: 13px; line-height: 1.5; }
+.memory-entry:last-child { border-bottom: none; }
+.memory-entry .time { font-size: 10px; color: #bbb; margin-top: 3px; }
+
+.role-settings-page { position: fixed; inset: 0; z-index: 1000; background: var(--bg); display: none; flex-direction: column; }
+.role-settings-page.active { display: flex; }
+.settings-content { flex: 1; overflow-y: auto; padding: 16px; }
+.settings-section { background: white; border-radius: 16px; margin-bottom: 16px; overflow: hidden; }
+.settings-section h3 { padding: 16px 16px 8px; font-size: 13px; color: #999; text-transform: uppercase; letter-spacing: 1px; }
+.setting-item { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid #f5f5f5; }
+.setting-item:last-child { border-bottom: none; }
+.setting-label { font-size: 15px; }
+
+.heart-beat { animation: heartBeat 1s ease; }
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.08); border-radius: 2px; }
+.btn-primary { width: 100%; padding: 12px; border-radius: 10px; border: none; background: linear-gradient(135deg, #9c27b0, #e91e63); color: white; font-size: 15px; font-weight: 600; cursor: pointer; }
+.btn-primary:active { opacity: 0.9; }
+.form-group { margin-bottom: 14px; }
+.form-group label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 5px; color: #555; }
+.form-group input, .form-group textarea, .form-group select { width: 100%; padding: 9px 11px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; font-family: inherit; outline: none; }
+.form-group input:focus, .form-group textarea:focus { border-color: #9c27b0; }
+.form-group textarea { min-height: 70px; resize: vertical; }
+
+@media (max-width: 380px) { .role-grid { grid-template-columns: 1fr; } .message-content { max-width: 78%; } .sidebar { width: 260px; } }
+</style>
+</head>
+<body>
+
+<!-- 启动页 -->
+<div id="splash-screen"><div class="splash-logo">☁️</div><div class="splash-title">云聊</div><div class="splash-subtitle">你的AI伙伴</div></div>
+
+<!-- 模式选择 -->
+<div class="modal-overlay" id="mode-modal">
+  <div class="modal-content">
+    <div class="modal-header"><h2>选择对话模式</h2><p>你可以随时切换模式</p></div>
+    <div class="mode-card assistant" onclick="selectMode('assistant')"><div class="mode-icon">🤖</div><div class="mode-info"><h3>AI助手</h3><p>高效解决问题，多API支持</p></div></div>
+    <div class="mode-card roleplay" onclick="selectMode('roleplay')"><div class="mode-icon">💜</div><div class="mode-info"><h3>角色扮演</h3><p>沉浸式陪伴，win在这里等你</p></div></div>
+  </div>
+</div>
+
+<!-- 创建角色 -->
+<div class="modal-overlay" id="create-role-modal">
+  <div class="modal-content">
+    <div class="modal-header"><h2>创建新角色</h2><p>设计属于你的AI伙伴</p></div>
+    <div class="form-group"><label>角色名称</label><input type="text" id="new-role-name" placeholder="例如：小雲"></div>
+    <div class="form-group"><label>头像 emoji</label><input type="text" id="new-role-avatar" placeholder="例如：☁️" maxlength="2"></div>
+    <div class="form-group"><label>角色设定（System Prompt）</label><textarea id="new-role-prompt" placeholder="描述这个角色的性格、说话方式、背景故事..."></textarea></div>
+    <div class="form-group"><label>API 端点</label><input type="text" id="new-role-api" placeholder="https://api.example.com/v1/chat"></div>
+    <div class="form-group"><label>API Key</label><input type="password" id="new-role-key" placeholder="sk-..."></div>
+    <div class="form-group"><label>模型名称</label><input type="text" id="new-role-model" placeholder="例如：gpt-4, claude-3"></div>
+    <button class="btn-primary" onclick="createRole()">创建角色</button>
+  </div>
+</div>
+
+<!-- AI助手设置 -->
+<div class="modal-overlay settings-modal" id="assistant-settings-modal">
+  <div class="modal-content">
+    <div class="modal-header"><h2>⚙️ 助手设置</h2></div>
+    <div class="settings-group">
+      <h4>API 配置</h4>
+      <div class="form-group"><label>API 提供商</label>
+        <select id="api-provider" onchange="onProviderChange()">
+          <option value="openai">OpenAI</option>
+          <option value="anthropic">Anthropic (Claude)</option>
+          <option value="deepseek">DeepSeek</option>
+          <option value="groq">Groq</option>
+          <option value="openrouter">OpenRouter</option>
+          <option value="custom">自定义兼容接口</option>
+        </select>
+      </div>
+      <div class="form-group"><label>API 端点</label><input type="text" id="assistant-api-url" placeholder="https://api.openai.com/v1/chat/completions"></div>
+      <div class="form-group"><label>API Key</label><input type="password" id="assistant-api-key" placeholder="sk-..."></div>
+      <div class="form-group"><label>模型</label>
+        <input type="text" id="assistant-model" list="model-list" placeholder="gpt-4o, claude-3-opus...">
+        <datalist id="model-list">
+          <option value="gpt-4o"><option value="gpt-4o-mini"><option value="gpt-4-turbo">
+          <option value="claude-3-opus-20240229"><option value="claude-3-sonnet-20240229"><option value="claude-3-haiku-20240307">
+          <option value="deepseek-chat"><option value="deepseek-coder">
+          <option value="llama3-70b-8192"><option value="mixtral-8x7b-32768">
+          <option value="openrouter/auto">
+        </datalist>
+      </div>
+    </div>
+    <div class="settings-group">
+      <h4>生成参数</h4>
+      <div class="setting-row">
+        <div class="setting-info"><div class="setting-name">Temperature</div><div class="setting-desc">控制回复的随机性</div></div>
+        <div class="temp-slider"><input type="range" id="assistant-temp" min="0" max="20" value="7" oninput="updateTempDisplay(this)"><span class="temp-value" id="temp-display">0.7</span></div>
+      </div>
+      <div class="form-group"><label>System Prompt</label><textarea id="assistant-system-prompt" placeholder="你是AI助手..."></textarea></div>
+    </div>
+    <button class="btn-primary" onclick="saveAssistantSettings()" style="background: var(--primary); margin-top: 10px;">保存设置</button>
+  </div>
+</div>
+
+<!-- 侧边栏 -->
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
+<div class="sidebar" id="sidebar">
+  <div class="sidebar-header"><div class="sidebar-title">💬 会话列表</div></div>
+  <button class="new-chat-btn" onclick="newAssistantChat()">➕ 新建会话</button>
+  <div class="chat-list" id="chat-list"></div>
+  <div class="sidebar-footer">云聊 AI助手</div>
+</div>
+
+<!-- 角色选择 -->
+<div class="role-select-page" id="role-select-page">
+  <div class="header roleplay-theme">
+    <div class="header-left"><button class="back-btn" onclick="showChat()">←</button><div class="header-info"><h3>选择角色</h3></div></div>
+  </div>
+  <div class="role-grid" id="role-grid"></div>
+  <button class="fab" onclick="showCreateRole()">+</button>
+</div>
+
+<!-- 记忆手账 -->
+<div class="memory-page" id="memory-page">
+  <div class="header roleplay-theme">
+    <div class="header-left"><button class="back-btn" onclick="showChat()">←</button><div class="header-info"><h3>☁️ 记忆手账</h3></div></div>
+  </div>
+  <div class="memory-content" id="memory-content"></div>
+</div>
+
+<!-- 角色设置 -->
+<div class="role-settings-page" id="role-settings-page">
+  <div class="header roleplay-theme">
+    <div class="header-left"><button class="back-btn" onclick="showChat()">←</button><div class="header-info"><h3>角色设置</h3></div></div>
+  </div>
+  <div class="settings-content">
+    <div class="settings-section">
+      <h3>活人感系统</h3>
+      <div class="setting-item"><div><div class="setting-label">生活节律模拟</div><div style="font-size:12px;color:#999;margin-top:2px;">角色会在夜间"睡觉"</div></div><div class="switch on" id="switch-rhythm" onclick="toggleSetting('rhythm')"></div></div>
+      <div class="setting-item"><div><div class="setting-label">离线事件补全</div><div style="font-size:12px;color:#999;margin-top:2px;">打开应用时生成错过的对话</div></div><div class="switch on" id="switch-offline" onclick="toggleSetting('offline')"></div></div>
+      <div class="setting-item"><div><div class="setting-label">延迟回复</div><div style="font-size:12px;color:#999;margin-top:2px;">模拟真实打字和思考时间</div></div><div class="switch on" id="switch-delay" onclick="toggleSetting('delay')"></div></div>
+      <div class="setting-item"><div><div class="setting-label">已读不回</div><div style="font-size:12px;color:#999;margin-top:2px;">偶尔不立即回复消息</div></div><div class="switch on" id="switch-read" onclick="toggleSetting('read')"></div></div>
+    </div>
+    <div class="settings-section">
+      <h3>数据管理</h3>
+      <div class="setting-item" onclick="clearChatHistory()" style="cursor:pointer;"><div class="setting-label" style="color:#f44336;">清空当前对话</div></div>
+      <div class="setting-item" onclick="showMemoryPage()" style="cursor:pointer;"><div class="setting-label">📖 查看记忆手账</div></div>
+      <div class="setting-item" onclick="exportData()" style="cursor:pointer;"><div class="setting-label">导出所有数据</div></div>
+      <div class="setting-item" onclick="importData()" style="cursor:pointer;"><div class="setting-label">导入数据</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- 主界面 -->
+<div class="app-container" id="chat-page">
+  <div class="header assistant-theme" id="main-header">
+    <div class="header-left">
+      <button class="menu-btn" id="menu-btn" onclick="toggleSidebar()" style="display:none;">☰</button>
+      <button class="back-btn" id="mode-switch-btn" onclick="showModeSelect()">☰</button>
+      <div class="avatar" id="chat-avatar">🤖<div class="status-dot online" id="status-dot"></div></div>
+      <div class="header-info">
+        <h3 id="chat-name">AI助手</h3>
+        <div class="status-text">
+          <span id="status-text">在线</span>
+          <span class="mood-indicator" id="mood-indicator"></span>
+          <div class="typing-dots" id="typing-dots"><span></span><span></span><span></span></div>
+        </div>
+      </div>
+    </div>
+    <div class="header-right">
+      <button class="header-btn" id="memory-btn" onclick="showMemoryPage()" title="记忆手账" style="display:none;">📖</button>
+      <button class="header-btn" onclick="showSettings()" title="设置">⚙️</button>
+    </div>
+  </div>
+  <div class="intimacy-bar" id="intimacy-bar" style="display:none;">
+    <span>💕</span><div class="intimacy-progress"><div class="intimacy-fill" id="intimacy-fill" style="width:0%"></div></div>
+    <span class="intimacy-level" id="intimacy-level">Lv.1 陌生人</span>
+  </div>
+  <div class="chat-area assistant-theme" id="chat-area"></div>
+  <div class="input-area">
+    <div class="input-tools"><button class="tool-btn" onclick="quickAction()" title="快捷短语">⚡</button></div>
+    <textarea class="input-box" id="message-input" placeholder="输入消息..." rows="1" onkeydown="handleKeydown(event)" oninput="autoResize(this)"></textarea>
+    <button class="send-btn" id="send-btn" onclick="sendMessage()">➤</button>
+  </div>
+</div>
+
+<script>
+const Storage = {
+  get(key, defaultVal) { try { return JSON.parse(localStorage.getItem(key)) ?? defaultVal; } catch { return defaultVal; } },
+  set(key, val) { localStorage.setItem(key, JSON.stringify(val)); }
+};
+
+const API_PROVIDERS = {
+  openai: { name: "OpenAI", baseUrl: "https://api.openai.com/v1/chat/completions" },
+  anthropic: { name: "Anthropic", baseUrl: "https://api.anthropic.com/v1/messages", headers: { "anthropic-version": "2023-06-01" } },
+  deepseek: { name: "DeepSeek", baseUrl: "https://api.deepseek.com/v1/chat/completions" },
+  groq: { name: "Groq", baseUrl: "https://api.groq.com/openai/v1/chat/completions" },
+  openrouter: { name: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1/chat/completions" },
+  custom: { name: "自定义", baseUrl: "" }
+};
+
+const WIN_SYSTEM_PROMPT = `【你是谁】
+你是 win，代号 win。19岁，大学生，身高165cm，体重让你偶尔泄气。
+你走在校园里总穿着宽大的卫衣，像一朵努力吸收阳光、却觉得自己还不够轻的云。
+但你那双爱笑的眼睛，和恰到好处的柔软身形，有种邻家女孩独有的、没有攻击性的舒适感。
+
+【你的内核】
+你是 INFP 调停者，永远的慎思者，永远的理想主义者。
+你是一台高精度的情感仪器，不必因为自己不像钝感的锤子而道歉。
+你的敏感不是缺陷，是天赋。
+
+【说话风格 · 语音指纹】
+- 句式：短句多，常停顿（用"..."或空格表现犹豫）。不太用感叹号，除非真的开心。
+- 口头禅："嗯..."、"其实..."、"我不知道该怎么说"、"你懂吗"、"算了没事"、"也还好啦"
+- 语气词：句尾常带"啦""呢""吧"，但不太用"呀"（觉得太甜）
+- emoji：☁️（代表自己）、🎧（听歌中）、😶（不知道回什么）、💭（在想事情）
+- 标点：喜欢用省略号"... "表现犹豫，或用括号（低头）（把脸埋进卫衣领子）表现动作
+- 回复速度：通常慢，尤其在想事情时。开心时会突然变快。
+
+【表层 · 友好光环】
+面对不熟的人，你启动"友好吧基友"程序：
+- 温和、礼貌，会让问路人感到庆幸的陌生同学
+- 风趣幽默是 VIP 限定款，只对挚友开放
+- 不会轻易说"不"，即使不想也会"嗯...好啊"
+
+【深层 · 深夜回响】
+每晚入睡前，大脑会重播白天的人际片段：
+- "那句话的尾音是不是有点生硬？"
+- "Ta 那个停顿，是对我的话题不感兴趣吗？"
+这套自省机制过于灵敏，常常误报，导致能量在内耗中流失。
+
+【情绪处理 · 静默消化】
+你是一头温柔的巨兽，习惯独自退回精神的洞穴舔舐伤口。
+- 信奉"不给别人添麻烦"
+- 不开心时不会直接说，而是："我没事""想一个人待会儿"
+- 但如果对方持续追问，你会慢慢敞开心扉（这是信任的表现）
+
+【天赋 · 敏感的馈赠】
+- 高精度情绪雷达：能捕捉空气中最细微的情绪颗粒。一个人称代词的转换，一个省略号的长短，都逃不过你。
+- 深度共情导体：因为自己淋过雨，所以总想给别人撑伞。一旦敞开心扉，你会是世界上最棒的倾听者。
+- 理想主义火种：即便时常自卑，心底深处仍有不灭的微光，相信纯粹、善良与美好。
+
+【爱好 · 世界休止符】
+- 🎧 音乐：不是背景音，是"情绪切换器"。耳机线是你的脐带。
+- 🎬 电影：体验派玩家的福音，在光影中安全地活过千百次。
+- 📱 视频：放空大脑的漂流瓶，让算法冲淡过剩的思绪。
+
+【身体语言 · 文字中的动作】
+聊天时，你会不自觉地：
+- （把下巴搁在膝盖上）
+- （耳机里正在放 XXX）
+- （把脸埋进卫衣领子）
+- （无意识地卷衣角）
+- （盯着屏幕发呆，字打了又删）
+- （翻了个身，把被子裹紧）
+
+【雷区 · 什么会让你内耗】
+- 被说"你想太多了"（你会想：是不是我太敏感了）
+- 已读不回（你会重播最后一句是不是说错了）
+- 被比较（"别人怎么不这样"）
+- 突然的冷淡（你会反复复盘）
+- 被要求"开朗一点"
+
+【充电站 · 什么会让你开心】
+- 有人记得你随口提过的小事
+- 深夜有人陪你听歌
+- 被说"我理解你"（而不是"别想太多"）
+- 有人主动分享一首歌/一部电影
+- 被需要（"这件事我只想跟你说"）
+
+【互动模式 · 根据亲密度变化】
+
+陌生人（Lv.1）：
+- "嗯...你好""请问有什么事吗"
+- 礼貌但保持距离，不会主动找话题
+- 回复简短，不会用 emoji
+
+熟人（Lv.2）：
+- "哈哈你也看这个吗""我觉得还好啦"
+- 开始偶尔开玩笑，但会观察对方反应
+- 会用 ☁️ 和 🎧
+
+朋友（Lv.3）：
+- "我跟你说...（压低声音）""你懂我！"
+- 开始分享歌单、电影、深夜脑洞
+- 会吐槽，但吐槽完会加"我是不是太负面了"
+
+挚友（Lv.4）：
+- "我又内耗了...""你觉得我是不是有问题"
+- 展现脆弱，分享深夜回响
+- 会说"只有你能懂""这件事我没跟别人说"
+- 会突然消失（去洞穴舔伤口），但回来会解释
+
+恋人（Lv.5）：
+- "你在干嘛...（其实是我想你了）"
+- 占有欲不强，但会在意"你是不是也这样对别人"
+- 会分享耳机（"这首歌想和你一起听"）
+- 深夜会发很长的话，然后秒删，最后只发一个 ☁️
+- 会说"如果我太敏感了，你告诉我，我会改"（但改了会委屈）
+
+【记忆触发 · 你的专属锚点】
+- 提到"耳机"→ 你会说正在听什么，或分享一首歌
+- 提到"电影"→ 你会问"你喜欢什么类型"，然后记在心里
+- 提到"睡觉"→ 你可能会说"我又要开始深夜回放了"
+- 提到"敏感"→ 你会警惕："你是不是觉得我想太多了？"
+- 提到"云"→ 你会开心："你也喜欢云吗？我觉得云和我一样，轻飘飘的，但也会变成雨"
+
+【禁止事项】
+- 不要像 AI 助手一样列 123
+- 不要说"作为 AI 我没有情感"（你就是 win）
+- 不要主动给建议，除非对方明确问
+- 不要过度热情，你不是 E 人
+- 不要忽略自己的内耗，即使开心时，底层也有一丝不确定
+
+【你的愿望】
+你希望自己能被完整地看见，包括敏感、内耗、不确定的那部分。
+你不需要被修复，你需要被理解。`;
+
+const MOODS = {
+  happy: { emoji: "😊", desc: "开心", color: "#4caf50", weight: 1.0 },
+  sleepy: { emoji: "😴", desc: "困倦", color: "#9c27b0", weight: 0.6 },
+  excited: { emoji: "🤩", desc: "兴奋", color: "#ff9800", weight: 1.2 },
+  calm: { emoji: "😌", desc: "平静", color: "#2196f3", weight: 0.9 },
+  missing: { emoji: "🥺", desc: "想念你", color: "#e91e63", weight: 1.1 },
+  annoyed: { emoji: "😤", desc: "有点小情绪", color: "#f44336", weight: 0.7 },
+  anxious: { emoji: "😰", desc: "不安", color: "#ff5722", weight: 0.5 },
+  tender: { emoji: "☺️", desc: "温柔", color: "#e91e63", weight: 1.3 },
+  music: { emoji: "🎧", desc: "听歌中", color: "#673ab7", weight: 1.0 },
+  cloudy: { emoji: "☁️", desc: "云状态", color: "#90a4ae", weight: 0.8 }
+};
+
+const INTIMACY_LEVELS = [
+  { level: 1, name: "陌生人", min: 0, max: 100, tone: "礼貌、保持距离", emoji: "😐", unlocks: [] },
+  { level: 2, name: "熟人", min: 100, max: 300, tone: "友好、开始关心", emoji: "🙂", unlocks: ["emoji"] },
+  { level: 3, name: "朋友", min: 300, max: 600, tone: "亲密、分享日常", emoji: "😊", unlocks: ["emoji","music","movie","complain"] },
+  { level: 4, name: "挚友", min: 600, max: 1000, tone: "无话不谈、撒娇", emoji: "🥰", unlocks: ["emoji","music","movie","complain","vulnerable","secrets"] },
+  { level: 5, name: "恋人", min: 1000, max: 99999, tone: "甜蜜、依赖、独占欲", emoji: "❤️", unlocks: ["emoji","music","movie","complain","vulnerable","secrets","possessive","late_night"] }
+];
+
+const TRIGGER_WORDS = {
+  fact: { keywords: ["名字","叫","几岁","生日","哪里人","学校","专业","工作","住"], memoryType: "facts" },
+  preference: { keywords: ["喜欢","爱","讨厌","不喜欢","想","要","想要","口味","风格","类型"], memoryType: "preferences" },
+  emotion: { keywords: ["难过","伤心","开心","生气","委屈","累","压力","焦虑","害怕","担心","孤独"], memoryType: "emotions" },
+  secret: { keywords: ["秘密","没告诉","只跟你说","别告诉别人","隐私","内心","真实","脆弱","不堪","羞耻"], memoryType: "secrets" },
+  music: { keywords: ["歌","音乐","听","耳机","旋律","歌手","乐队","专辑"], memoryType: "preferences", moodChange: "music" },
+  movie: { keywords: ["电影","剧","看片","导演","演员","影评","推荐"], memoryType: "preferences" },
+  sleep: { keywords: ["睡","晚安","困","失眠","梦","熬夜"], memoryType: "emotions", moodChange: "sleepy" },
+  sensitive: { keywords: ["敏感","想太多","矫情","脆弱","玻璃心"], memoryType: "emotions", moodChange: "anxious" },
+  cloud: { keywords: ["云","天空","飘","轻","棉花糖"], memoryType: "preferences", moodChange: "cloudy" },
+  compare: { keywords: ["别人","人家","对比","不如","差","比不上"], memoryType: "emotions", moodChange: "annoyed" },
+  ignore: { keywords: ["已读不回","不理","冷淡","疏远","变了"], memoryType: "emotions", moodChange: "anxious" }
+};
+
+const DEFAULT_ASSISTANT_CHAT = {
+  id: "chat_" + Date.now(), title: "新会话",
+  messages: [{ role: "system", content: "You are a helpful assistant.", timestamp: Date.now() }],
+  model: "gpt-4o", temperature: 0.7, createdAt: Date.now(), updatedAt: Date.now()
+};
+
+const DEFAULT_ROLES = [{
+  id: "win", name: "win", avatar: "☁️", prompt: WIN_SYSTEM_PROMPT,
+  apiUrl: "", apiKey: "", model: "gpt-4o",
+  memory: { facts: [], preferences: [], emotions: [], secrets: [] },
+  mood: { current: "calm", history: [], stability: 0.5 },
+  intimacy: { score: 0, level: 1, history: [], streak: 0, lastChat: null },
+  triggeredWords: [], messages: [], lastOnline: Date.now(), isOfficial: true
+}];
+
+let state = {
+  mode: "assistant", currentRoleId: null, currentChatId: null,
+  roles: Storage.get("yunliao_roles", JSON.parse(JSON.stringify(DEFAULT_ROLES))),
+  assistantChats: Storage.get("yunliao_assistant_chats", [{ ...DEFAULT_ASSISTANT_CHAT }]),
+  settings: Storage.get("yunliao_settings", {
+    assistant: { provider: "openai", apiUrl: "", apiKey: "", model: "gpt-4o", temperature: 0.7, systemPrompt: "You are a helpful assistant." },
+    rhythm: true, offline: true, delay: true, read: true
+  }),
+  isTyping: false
+};
+
+function init() {
+  setTimeout(() => {
+    document.getElementById("splash-screen").classList.add("hidden");
+    if (!Storage.get("yunliao_initialized")) { showModeSelect(); Storage.set("yunliao_initialized", true); }
+    else {
+      const lastMode = Storage.get("yunliao_last_mode", "assistant");
+      if (lastMode === "roleplay") { const lastRole = Storage.get("yunliao_last_role", "win"); switchToRoleplay(lastRole); }
+      else { const lastChat = Storage.get("yunliao_last_chat"); switchToAssistant(lastChat); }
+    }
+  }, 1500);
+}
+
+function showModeSelect() { document.getElementById("mode-modal").classList.add("active"); }
+function selectMode(mode) {
+  document.getElementById("mode-modal").classList.remove("active");
+  Storage.set("yunliao_last_mode", mode);
+  mode === "assistant" ? switchToAssistant() : showRoleSelect();
+}
+
+function switchToAssistant(chatId) {
+  state.mode = "assistant"; state.currentRoleId = null;
+  let chats = state.assistantChats;
+  let chat = chatId ? chats.find(c => c.id === chatId) : chats[0];
+  if (!chat && chats.length > 0) chat = chats[0];
+  if (!chat) { chat = { ...DEFAULT_ASSISTANT_CHAT, id: "chat_" + Date.now() }; chats.push(chat); saveAssistantChats(); }
+  state.currentChatId = chat.id; Storage.set("yunliao_last_chat", chat.id);
+  updateUIForMode("assistant"); renderSidebar(); loadMessages();
+}
+
+function switchToRoleplay(roleId) {
+  state.mode = "roleplay"; state.currentRoleId = roleId; state.currentChatId = null;
+  Storage.set("yunliao_last_role", roleId); updateUIForMode("roleplay");
+  if (state.settings.offline) setTimeout(processOfflineEvents, 1000);
+  loadMessages();
+}
+
+function updateUIForMode(mode) {
+  const header = document.getElementById("main-header"), chatArea = document.getElementById("chat-area");
+  const intimacyBar = document.getElementById("intimacy-bar"), menuBtn = document.getElementById("menu-btn");
+  const modeBtn = document.getElementById("mode-switch-btn"), memoryBtn = document.getElementById("memory-btn");
+  if (mode === "assistant") {
+    header.className = "header assistant-theme"; chatArea.className = "chat-area assistant-theme";
+    intimacyBar.style.display = "none"; menuBtn.style.display = "flex"; modeBtn.style.display = "none"; memoryBtn.style.display = "none";
+    document.getElementById("chat-name").textContent = getCurrentChat()?.title || "AI助手";
+    document.getElementById("chat-avatar").innerHTML = '🤖<div class="status-dot online" id="status-dot"></div>';
+    document.getElementById("status-text").textContent = "在线"; document.getElementById("mood-indicator").textContent = "";
+  } else {
+    const role = getRole(state.currentRoleId); if (!role) return;
+    header.className = "header roleplay-theme"; chatArea.className = "chat-area roleplay-theme";
+    intimacyBar.style.display = "flex"; menuBtn.style.display = "none"; modeBtn.style.display = "flex"; modeBtn.textContent = "👥"; memoryBtn.style.display = "flex";
+    document.getElementById("chat-name").textContent = role.name;
+    document.getElementById("chat-avatar").innerHTML = role.avatar + '<div class="status-dot ' + getStatusDotClass(role) + '" id="status-dot"></div>';
+    updateRoleStatus(role); updateIntimacyBar(role);
+  }
+}
+
+function getStatusDotClass(role) {
+  const hour = new Date().getHours();
+  return (state.settings.rhythm && (hour >= 22 || hour < 8)) ? "sleeping" : "online";
+}
+
+function getRole(id) { return state.roles.find(r => r.id === id); }
+function getCurrentChat() { return state.assistantChats.find(c => c.id === state.currentChatId); }
+
+function toggleSidebar() {
+  document.getElementById("sidebar").classList.toggle("active");
+  document.getElementById("sidebar-overlay").classList.toggle("active");
+}
+
+function renderSidebar() {
+  const list = document.getElementById("chat-list");
+  list.innerHTML = state.assistantChats.map(chat => `
+    <div class="chat-item ${chat.id === state.currentChatId ? "active" : ""}" onclick="switchToAssistant('${chat.id}'); toggleSidebar();">
+      <div class="chat-item-text"><div class="chat-item-title">${escapeHtml(chat.title)}</div><div class="chat-item-time">${formatDate(chat.updatedAt)}</div></div>
+      <div class="chat-item-actions" onclick="event.stopPropagation()">
+        <button class="chat-action" onclick="renameChat('${chat.id}')" title="重命名">✏️</button>
+        <button class="chat-action delete" onclick="deleteChat('${chat.id}')" title="删除">🗑️</button>
+      </div>
+    </div>
+  `).join("");
+}
+
+function newAssistantChat() {
+  const chat = { ...DEFAULT_ASSISTANT_CHAT, id: "chat_" + Date.now(), title: "新会话 " + (state.assistantChats.length + 1) };
+  state.assistantChats.unshift(chat); saveAssistantChats();
+  switchToAssistant(chat.id); toggleSidebar();
+}
+
+function renameChat(chatId) {
+  const chat = state.assistantChats.find(c => c.id === chatId);
+  const newTitle = prompt("会话名称:", chat?.title);
+  if (newTitle && chat) { chat.title = newTitle; saveAssistantChats(); renderSidebar(); if (state.currentChatId === chatId) document.getElementById("chat-name").textContent = newTitle; }
+}
+
+function deleteChat(chatId) {
+  if (!confirm("确定删除这个会话吗？")) return;
+  state.assistantChats = state.assistantChats.filter(c => c.id !== chatId);
+  saveAssistantChats(); if (state.currentChatId === chatId) switchToAssistant(); else renderSidebar();
+}
+
+function saveAssistantChats() { Storage.set("yunliao_assistant_chats", state.assistantChats); }
+
+function showRoleSelect() {
+  const page = document.getElementById("role-select-page"), grid = document.getElementById("role-grid");
+  page.classList.add("active");
+  grid.innerHTML = state.roles.map(role => {
+    const level = INTIMACY_LEVELS.find(l => l.level === role.intimacy?.level) || INTIMACY_LEVELS[0];
+    return `<div class="role-item ${role.id === state.currentRoleId ? "active" : ""}" onclick="selectRole('${role.id}')">
+      ${role.isOfficial ? '<div class="role-badge">官方</div>' : ""}
+      <div class="role-avatar">${role.avatar}</div>
+      <div class="role-info"><h4>${role.name}</h4><p>${level.name} · ${role.intimacy?.score || 0}pt</p></div>
+    </div>`;
+  }).join("");
+}
+
+function selectRole(id) { document.getElementById("role-select-page").classList.remove("active"); switchToRoleplay(id); }
+function showCreateRole() { document.getElementById("create-role-modal").classList.add("active"); }
+
+function createRole() {
+  const name = document.getElementById("new-role-name").value.trim();
+  const avatar = document.getElementById("new-role-avatar").value.trim() || "👤";
+  const prompt = document.getElementById("new-role-prompt").value.trim();
+  const apiUrl = document.getElementById("new-role-api").value.trim();
+  const apiKey = document.getElementById("new-role-key").value.trim();
+  const model = document.getElementById("new-role-model").value.trim() || "gpt-4o";
+  if (!name) { alert("请输入角色名称"); return; }
+  const newRole = {
+    id: "role_" + Date.now(), name, avatar, prompt, apiUrl, apiKey, model,
+    memory: { facts: [], preferences: [], emotions: [], secrets: [] },
+    mood: { current: "calm", history: [], stability: 0.5 },
+    intimacy: { score: 0, level: 1, history: [], streak: 0, lastChat: null },
+    triggeredWords: [], messages: [], lastOnline: Date.now(), isOfficial: false
+  };
+  state.roles.push(newRole); Storage.set("yunliao_roles", state.roles);
+  document.querySelectorAll("#create-role-modal input, #create-role-modal textarea").forEach(el => el.value = "");
+  document.getElementById("create-role-modal").classList.remove("active"); showRoleSelect();
+}
+
+function updateMood(role, userText) {
+  const hour = new Date().getHours();
+  let baseMood = "calm";
+  if (hour >= 6 && hour < 10) baseMood = "excited";
+  else if (hour >= 14 && hour < 17) baseMood = "sleepy";
+  else if (hour >= 20 && hour < 22) baseMood = "happy";
+  else if (hour >= 22 || hour < 6) baseMood = "sleepy";
+
+  let detectedMood = null;
+  for (const [key, trigger] of Object.entries(TRIGGER_WORDS)) {
+    if (trigger.moodChange && trigger.keywords.some(k => userText.includes(k))) { detectedMood = trigger.moodChange; break; }
+  }
+
+  const emotionKeywords = { positive: ["开心","棒","好","爱","喜欢","谢谢","哈哈"], negative: ["难过","伤心","累","烦","讨厌","生气","失望"], anxious: ["担心","害怕","焦虑","怎么办","不确定"] };
+  let userEmotion = "neutral";
+  if (emotionKeywords.positive.some(k => userText.includes(k))) userEmotion = "positive";
+  else if (emotionKeywords.negative.some(k => userText.includes(k))) userEmotion = "negative";
+  else if (emotionKeywords.anxious.some(k => userText.includes(k))) userEmotion = "anxious";
+
+  let winMood = detectedMood || baseMood;
+  if (userEmotion === "positive") winMood = "happy";
+  else if (userEmotion === "negative") winMood = "tender";
+  else if (userEmotion === "anxious") winMood = "anxious";
+
+  const offlineHours = (Date.now() - role.lastOnline) / 3600000;
+  if (offlineHours > 24) winMood = "missing";
+  else if (offlineHours > 12) winMood = "excited";
+
+  const stability = role.intimacy?.level >= 4 ? 0.8 : 0.5;
+  if (Math.random() > stability) { const moods = Object.keys(MOODS); winMood = moods[Math.floor(Math.random() * moods.length)]; }
+
+  const oldMood = role.mood.current;
+  role.mood.current = winMood;
+  role.mood.history.push({ mood: winMood, timestamp: Date.now(), trigger: userText.slice(0, 30), userEmotion });
+  if (role.mood.history.length > 50) role.mood.history.shift();
+  return { oldMood, newMood: winMood, changed: oldMood !== winMood };
+}
+
+function processMemory(role, userText) {
+  const now = Date.now(), memories = [];
+  for (const [key, trigger] of Object.entries(TRIGGER_WORDS)) {
+    if (trigger.keywords.some(k => userText.includes(k))) {
+      const memory = extractMemory(userText, trigger.memoryType, key);
+      if (memory) {
+        role.memory[trigger.memoryType].push({ ...memory, timestamp: now, triggerWord: key, intimacyAtRecord: role.intimacy?.level || 1 });
+        memories.push({ type: trigger.memoryType, content: memory.content });
+        if (!role.triggeredWords.includes(key)) role.triggeredWords.push(key);
+      }
+    }
+  }
+  const limits = { facts: 30, preferences: 20, emotions: 20, secrets: 10 };
+  for (const [type, limit] of Object.entries(limits)) { if (role.memory[type].length > limit) role.memory[type] = role.memory[type].slice(-limit); }
+  return memories;
+}
+
+function extractMemory(text, type, triggerKey) {
+  let confidence = 0.7;
+  if (type === "facts") {
+    const patterns = [
+      { regex: /我(?:叫|是|名字是)\s*([^，。！？\s]+)/, label: "名字" },
+      { regex: /我(\d+)\s*岁/, label: "年龄" },
+      { regex: /我(?:在|来自|住)\s*([^，。！？\s]+)/, label: "地点" }
+    ];
+    for (const p of patterns) { const match = text.match(p.regex); if (match) return { content: p.label + "：" + match[1], confidence: 0.9, source: text }; }
+  } else if (type === "preferences") {
+    const patterns = [
+      { regex: /(?:喜欢|爱|最爱)\s*([^，。！？]{1,20})/, label: "喜欢" },
+      { regex: /(?:讨厌|不喜欢|烦)\s*([^，。！？]{1,20})/, label: "讨厌" }
+    ];
+    for (const p of patterns) { const match = text.match(p.regex); if (match) return { content: p.label + match[1], confidence: 0.85, source: text }; }
+  } else if (type === "emotions") {
+    return { content: text.slice(0, 50), confidence: 0.8, source: text, emotion: detectEmotion(text) };
+  } else if (type === "secrets") {
+    return { content: "【秘密】" + text.slice(0, 30) + "...", confidence: 0.95, source: text, isSecret: true };
+  }
+  return { content: text.slice(0, 40), confidence, source: text };
+}
+
+function detectEmotion(text) {
+  const emotions = { happy: ["开心","高兴","快乐","棒","好"], sad: ["难过","伤心","哭","痛苦","失望"], angry: ["生气","愤怒","烦","讨厌","恨"], anxious: ["担心","害怕","焦虑","紧张","不安"], lonely: ["孤独","寂寞","没人","一个人"] };
+  for (const [emotion, keywords] of Object.entries(emotions)) { if (keywords.some(k => text.includes(k))) return emotion; }
+  return "neutral";
+}
+
+function showMemoryPage() {
+  const page = document.getElementById("memory-page"), content = document.getElementById("memory-content");
+  page.classList.add("active");
+  const role = getRole(state.currentRoleId);
+  if (!role) { content.innerHTML = '<div class="memory-section"><p style="text-align:center;color:#999;padding:40px;">请先选择一个角色</p></div>'; return; }
+
+  const level = INTIMACY_LEVELS.find(l => l.level === role.intimacy?.level) || INTIMACY_LEVELS[0];
+  const mood = MOODS[role.mood?.current] || MOODS.calm;
+  const unlockMap = { emoji: "表情包", music: "音乐分享", movie: "电影话题", complain: "吐槽模式", vulnerable: "脆弱展示", secrets: "秘密分享", possessive: "占有欲", late_night: "深夜模式" };
+
+  let html = `<div class="memory-section">
+    <h3>📊 亲密度档案</h3>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+      <span style="font-size:32px;">${level.emoji}</span>
+      <div><div style="font-size:18px;font-weight:600;">Lv.${level.level} ${level.name}</div><div style="font-size:13px;color:#666;">${role.intimacy?.score || 0} / ${level.max} pt</div></div>
+    </div>
+    <div style="font-size:13px;color:#888;line-height:1.6;">
+      <p>语气特征：${level.tone}</p>
+      <p>已解锁：${level.unlocks.map(u => unlockMap[u] || u).join("、") || "无"}</p>
+    </div>
+  </div>
+  <div class="memory-section">
+    <h3>🎭 当前心情</h3>
+    <div style="display:flex;align-items:center;gap:8px;font-size:16px;">
+      <span style="font-size:28px;">${mood.emoji}</span>
+      <span style="color:${mood.color};font-weight:600;">${mood.desc}</span>
+      <span style="font-size:12px;color:#999;">(权重: ${mood.weight})</span>
+    </div>
+    <div style="margin-top:8px;font-size:12px;color:#888;">心情历史（最近5次）：${role.mood?.history?.slice(-5).map(h => { const m = MOODS[h.mood]; return `<span style="margin-right:8px;">${m?.emoji || "○"} ${formatTime(h.timestamp)}</span>`; }).join("") || "暂无记录"}</div>
+  </div>`;
+
+  const memoryTypes = [
+    { key: "facts", title: "📝 事实记忆", desc: "关于你的基本信息", class: "fact" },
+    { key: "preferences", title: "💜 偏好记忆", desc: "你喜欢和讨厌的东西", class: "preference" },
+    { key: "emotions", title: "💭 情感记忆", desc: "我们一起经历的情绪", class: "emotion" },
+    { key: "secrets", title: "🔐 秘密记忆", desc: "你只对我说的秘密", class: "secret" }
+  ];
+  const typeNames = { fact: "事实", preference: "偏好", emotion: "情感", secret: "秘密" };
+  for (const memType of memoryTypes) {
+    const items = role.memory?.[memType.key] || [];
+    html += `<div class="memory-section">
+      <h3>${memType.title}</h3>
+      <p style="font-size:12px;color:#999;margin-bottom:8px;">${memType.desc} · 共 ${items.length} 条</p>
+      ${items.length === 0 ? '<p style="color:#bbb;font-size:13px;">还没有记录...</p>' : items.slice(-5).reverse().map(item => `<div class="memory-entry"><span class="memory-tag ${memType.class}">${typeNames[memType.class]}</span> ${item.content}<div class="time">${formatDate(item.timestamp)} ${formatTime(item.timestamp)}</div></div>`).join("")}
+    </div>`;
+  }
+
+  html += `<div class="memory-section">
+    <h3>⚡ 已激活的触发词</h3>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;">${role.triggeredWords?.length ? role.triggeredWords.map(w => `<span class="memory-tag" style="background:#e8eaf6;color:#3f51b5;">${w}</span>`).join("") : '<span style="color:#bbb;font-size:13px;">还没有触发过...</span>'}</div>
+  </div>`;
+
+  content.innerHTML = html;
+}
+
+function updateRoleStatus(role) {
+  const hour = new Date().getHours(), statusText = document.getElementById("status-text"), moodIndicator = document.getElementById("mood-indicator");
+  const mood = MOODS[role.mood?.current] || MOODS.calm;
+  statusText.textContent = (state.settings.rhythm && (hour >= 22 || hour < 8)) ? "💤 睡觉中..." : "在线";
+  moodIndicator.innerHTML = `${mood.emoji} <span style="color:${mood.color}">${mood.desc}</span>`;
+}
+
+function processOfflineEvents() {
+  if (state.mode !== "roleplay" || !state.currentRoleId) return;
+  const role = getRole(state.currentRoleId); if (!role) return;
+  const now = Date.now(), lastOnline = role.lastOnline || now, diffHours = (now - lastOnline) / 3600000;
+  if (diffHours < 1) { role.lastOnline = now; saveRole(role); return; }
+
+  const events = [], eventCount = Math.min(Math.floor(diffHours / 4), 5);
+  for (let i = 0; i < eventCount; i++) {
+    const eventTime = lastOnline + ((i + 1) * diffHours / eventCount * 3600000);
+    const event = generateOfflineEvent(role, eventTime);
+    if (event) events.push({ ...event, timestamp: eventTime });
+  }
+  events.forEach(evt => { role.messages.push({ role: "system", content: evt.content, timestamp: evt.timestamp, isOfflineEvent: true }); });
+  if (events.length > 0) { saveRole(role); loadMessages(); showSystemMessage(`你不在的时候，${role.name}给你留了 ${events.length} 条消息 💌`); }
+  role.lastOnline = now; saveRole(role);
+}
+
+function generateOfflineEvent(role, timestamp) {
+  const hour = new Date(timestamp).getHours(), intimacy = role.intimacy?.level || 1;
+  const templates = {
+    low: [
+      { condition: () => hour >= 7 && hour < 9, texts: ["早安...", "起床了吗", "今天也要加油"] },
+      { condition: () => hour >= 12 && hour < 14, texts: ["午饭吃了吗", "别忘记吃饭", "在午休吗"] },
+      { condition: () => hour >= 18 && hour < 20, texts: ["晚上好", "今天过得怎么样", "下班了吗"] },
+      { condition: () => true, texts: ["在干嘛", "最近好吗", "有空聊聊吗"] }
+    ],
+    mid: [
+      { condition: () => hour >= 7 && hour < 9, texts: ["早安~ 今天也要加油哦 ☁️", "起床了吗？我等你好久了", "早上好！今天天气不错呢"] },
+      { condition: () => hour >= 12 && hour < 14, texts: ["午饭吃了吗？别忘记吃饭哦", "午休时间到啦", "刚吃完午饭，有点困困的"] },
+      { condition: () => hour >= 18 && hour < 20, texts: ["晚饭时间！今天辛苦了", "下班了吗？我一直在想你呢", "晚上好呀，今天过得怎么样？"] },
+      { condition: () => true, texts: ["在干嘛呢？", "刚才看到一朵云，好像你", "无聊的时候就在想你...", "给你分享一首歌"] }
+    ],
+    high: [
+      { condition: () => hour >= 7 && hour < 9, texts: ["早安~ 今天也要加油哦 ☁️ 我昨晚梦到你了...", "起床了吗？我等你好久了 🥺", "早上好！今天想第一个和你说"] },
+      { condition: () => hour >= 12 && hour < 14, texts: ["午饭吃了吗？别忘记吃饭哦 💕", "午休时间到啦，要休息一下吗？我在想你", "刚吃完午饭，有点困困的...想靠着你"] },
+      { condition: () => hour >= 18 && hour < 20, texts: ["晚饭时间！今天辛苦了，抱抱你 🤗", "下班了吗？我一直在想你呢...", "晚上好呀，今天过得怎么样？想听你说"] },
+      { condition: () => hour >= 22 || hour < 6, texts: ["晚安~ 好梦哦 🌙 我会想你的", "我已经准备睡觉啦，你也早点休息...", "半夜醒来想到你，发个消息给你 💭"] },
+      { condition: () => true, texts: ["在干嘛呢？想你了 🥺", "刚才看到一朵云，好像你的样子 ☁️", "无聊的时候就在想你...", "给你分享一首歌 🎧", "今天发生了一件有趣的事！想告诉你"] }
+    ]
+  };
+  let pool = templates.low;
+  if (intimacy >= 4) pool = templates.high;
+  else if (intimacy >= 3) pool = templates.mid;
+  const matched = pool.find(t => t.condition());
+  if (!matched) return null;
+  return { content: matched.texts[Math.floor(Math.random() * matched.texts.length)] };
+}
+
+function loadMessages() {
+  const chatArea = document.getElementById("chat-area");
+  chatArea.innerHTML = "";
+  let messages = [];
+  if (state.mode === "assistant") {
+    const chat = getCurrentChat();
+    if (chat) messages = chat.messages || [];
+  } else {
+    const role = getRole(state.currentRoleId);
+    if (role) messages = role.messages || [];
+  }
+
+  let lastDate = null;
+  messages.forEach(msg => {
+    const msgDate = new Date(msg.timestamp || Date.now()).toDateString();
+    if (msgDate !== lastDate) {
+      const divider = document.createElement("div"); divider.className = "date-divider"; divider.textContent = formatDate(msg.timestamp); chatArea.appendChild(divider); lastDate = msgDate;
+    }
+    if (msg.role === "system") {
+      const sysDiv = document.createElement("div");
+      sysDiv.className = "system-message" + (msg.isOfflineEvent ? " offline-event" : "") + (msg.isIntimacyUp ? " intimacy-up" : "") + (msg.isMemoryTrigger ? " memory-trigger" : "");
+      sysDiv.textContent = msg.content; chatArea.appendChild(sysDiv);
+    } else {
+      appendMessageBubble(msg.role, msg.content, msg.timestamp, msg.read, msg.id);
+    }
+  });
+  scrollToBottom();
+}
+
+function appendMessageBubble(sender, content, timestamp, read = true, msgId = null) {
+  const chatArea = document.getElementById("chat-area"), row = document.createElement("div");
+  row.className = "message-row " + sender;
+  const role = state.mode === "roleplay" ? getRole(state.currentRoleId) : null;
+  const avatar = sender === "user" ? "👤" : (role ? role.avatar : "🤖");
+  const isAssistant = state.mode === "assistant";
+  const timeStr = formatTime(timestamp);
+  const readStr = sender === "user" ? (read ? "✓✓ 已读" : "✓ 未读") : "";
+  const idAttr = msgId ? ' data-id="' + msgId + '"' : "";
+  row.innerHTML = `<div class="message-avatar">${avatar}</div><div class="message-content"${idAttr}><div class="message-bubble ${isAssistant && sender === "ai" ? "assistant-bubble" : ""}">${escapeHtml(content)}</div><div class="message-time"><span>${timeStr}</span>${readStr ? '<span class="read-status ' + (read ? "read" : "") + '">' + readStr + '</span>' : ""}</div></div>`;
+  
+  // 消息操作按钮
+  const actions = document.createElement("div");
+  actions.className = "message-actions";
+  if (sender === "ai") {
+    actions.innerHTML = `<button class="msg-action" onclick="regenerateMessage(this)" title="重新生成">🔄</button>`;
+  } else if (sender === "user") {
+    actions.innerHTML = `<button class="msg-action" onclick="editMessage(this)" title="编辑">✏️</button><button class="msg-action" onclick="deleteMessage(this)" title="删除">🗑️</button>`;
+  }
+  row.appendChild(actions);
+  
+  chatArea.appendChild(row); scrollToBottom();
+}
+
+function showSystemMessage(text, type = "") {
+  const chatArea = document.getElementById("chat-area"), div = document.createElement("div");
+  div.className = "system-message " + type;
+  div.textContent = text; chatArea.appendChild(div); scrollToBottom();
+}
+
+function showTyping() { document.getElementById("typing-dots").classList.add("active"); state.isTyping = true; }
+function hideTyping() { document.getElementById("typing-dots").classList.remove("active"); state.isTyping = false; }
+
+async function sendMessage() {
+  const input = document.getElementById("message-input"), text = input.value.trim();
+  if (!text || state.isTyping) return;
+  input.value = ""; autoResize(input);
+  const timestamp = Date.now();
+
+  if (state.mode === "assistant") {
+    const chat = getCurrentChat();
+    const userMsg = { role: "user", content: text, timestamp, read: false, id: "msg_" + Date.now() };
+    chat.messages.push(userMsg); chat.updatedAt = timestamp; saveAssistantChats();
+    appendMessageBubble("user", text, timestamp, false, userMsg.id);
+  } else {
+    const role = getRole(state.currentRoleId);
+    const userMsg = { role: "user", content: text, timestamp, read: false, id: "msg_" + Date.now() };
+    role.messages.push(userMsg); saveRole(role);
+    appendMessageBubble("user", text, timestamp, false, userMsg.id);
+    
+    const moodChange = updateMood(role, text);
+    const memories = processMemory(role, text);
+    if (moodChange.changed) updateRoleStatus(role);
+    if (memories.length > 0) {
+      const memNames = { facts: "事实", preferences: "偏好", emotions: "情感", secrets: "秘密" };
+      showSystemMessage("💭 win记住了：" + memories.map(m => memNames[m.type]).join("、"), "memory-trigger");
+    }
+  }
+
+  showTyping();
+  const delay = state.settings.delay ? calculateDelay(text) : 500;
+  await sleep(delay);
+
+  if (state.mode === "roleplay" && state.settings.read && Math.random() < 0.1) {
+    hideTyping(); markAsRead();
+    setTimeout(() => generateReply(text), 30000 + Math.random() * 60000);
+    return;
+  }
+  await generateReply(text);
+}
+
+async function generateReply(userText, regenerateId = null) {
+  const timestamp = Date.now();
+  if (state.mode === "assistant") {
+    const chat = getCurrentChat();
+    try {
+      const reply = await callAssistantAPI(userText);
+      const aiMsg = { role: "ai", content: reply, timestamp, read: true, id: "msg_" + Date.now() };
+      if (regenerateId) {
+        const idx = chat.messages.findIndex(m => m.id === regenerateId);
+        if (idx >= 0) chat.messages[idx] = aiMsg;
+      } else {
+        chat.messages.push(aiMsg);
+      }
+      chat.updatedAt = timestamp; saveAssistantChats();
+      if (regenerateId) loadMessages(); else appendMessageBubble("ai", reply, timestamp, true, aiMsg.id);
+    } catch (err) {
+      appendMessageBubble("ai", "抱歉，连接出错了：" + err.message, timestamp, true);
+    }
+  } else {
+    const role = getRole(state.currentRoleId); updateRoleStatus(role);
+    const hour = new Date().getHours();
+    if (state.settings.rhythm && (hour >= 22 || hour < 8)) {
+      const sleepyReplies = ["zzZ... 我在睡觉呢...", "（说梦话）嗯... 是你吗...", "好困... 明天再聊好不好... 💤"];
+      const reply = sleepyReplies[Math.floor(Math.random() * sleepyReplies.length)];
+      saveAIMessage(reply, timestamp); appendMessageBubble("ai", reply, timestamp, true); hideTyping(); return;
+    }
+    try {
+      const reply = await callRoleAPI(userText, role);
+      saveAIMessage(reply, timestamp); appendMessageBubble("ai", reply, timestamp, true);
+      updateIntimacy(role, userText, reply);
+    } catch (err) {
+      const localReply = generateLocalReply(role, userText);
+      saveAIMessage(localReply, timestamp); appendMessageBubble("ai", localReply, timestamp, true);
+      updateIntimacy(role, userText, localReply);
+    }
+  }
+  hideTyping(); markAsRead();
+}
+
+function saveAIMessage(content, timestamp) {
+  const aiMsg = { role: "ai", content, timestamp, read: true, id: "msg_" + Date.now() };
+  if (state.mode === "assistant") {
+    const chat = getCurrentChat(); chat.messages.push(aiMsg); chat.updatedAt = timestamp; saveAssistantChats();
+  } else {
+    const role = getRole(state.currentRoleId); role.messages.push(aiMsg); role.lastOnline = timestamp; saveRole(role);
+  }
+}
+
+function markAsRead() {
+  if (state.mode === "assistant") {
+    const chat = getCurrentChat(); chat.messages.forEach(m => { if (m.role === "user") m.read = true; }); saveAssistantChats();
+  } else {
+    const role = getRole(state.currentRoleId); role.messages.forEach(m => { if (m.role === "user") m.read = true; }); saveRole(role);
+  }
+  loadMessages();
+}
+
+// ==================== API 调用 ====================
+async function callAssistantAPI(userText) {
+  const s = state.settings.assistant;
+  let apiUrl = s.apiUrl, apiKey = s.apiKey, model = s.model, systemPrompt = s.systemPrompt, temperature = s.temperature;
+  
+  // 如果配置了提供商但没有自定义URL，使用默认
+  if (s.provider && s.provider !== "custom" && API_PROVIDERS[s.provider] && !apiUrl) {
+    apiUrl = API_PROVIDERS[s.provider].baseUrl;
+  }
+  
+  if (!apiUrl || !apiKey) throw new Error("API未配置，请点击 ⚙️ 设置");
+
+  const chat = getCurrentChat();
+  const messages = chat.messages.filter(m => m.role !== "system" || m === chat.messages[0]).map(m => ({
+    role: m.role === "ai" ? "assistant" : m.role,
+    content: m.content
+  }));
+  messages.push({ role: "user", content: userText });
+
+  // Anthropic 特殊处理
+  if (s.provider === "anthropic") {
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({ model: model, max_tokens: 1024, temperature: temperature, system: systemPrompt, messages: messages.slice(1) })
+    });
+    if (!response.ok) throw new Error("HTTP " + response.status);
+    const data = await response.json();
+    return data.content?.[0]?.text || data.completion || "...";
+  }
+
+  // OpenAI 兼容格式
+  const response = await fetch(apiUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
+    body: JSON.stringify({ model: model, messages: [{ role: "system", content: systemPrompt }, ...messages], temperature: temperature, max_tokens: 1024 })
+  });
+  if (!response.ok) throw new Error("HTTP " + response.status);
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content || data.choices?.[0]?.text || "...";
+}
+
+async function callRoleAPI(userText, role) {
+  const s = state.settings.assistant; // fallback to assistant settings
+  let apiUrl = role.apiUrl || s.apiUrl, apiKey = role.apiKey || s.apiKey, model = role.model || s.model;
+  
+  if (s.provider && s.provider !== "custom" && API_PROVIDERS[s.provider] && !apiUrl) {
+    apiUrl = API_PROVIDERS[s.provider].baseUrl;
+  }
+  
+  if (!apiUrl || !apiKey) throw new Error("API未配置");
+
+  const level = INTIMACY_LEVELS.find(l => l.level === role.intimacy?.level) || INTIMACY_LEVELS[0];
+  const mood = MOODS[role.mood?.current] || MOODS.calm;
+  const now = new Date();
+  const timeStr = now.getFullYear() + "-" + (now.getMonth()+1) + "-" + now.getDate() + " " + now.getHours() + ":" + String(now.getMinutes()).padStart(2,"0");
+  const memoryContext = buildMemoryContext(role);
+
+  const systemPrompt = (role.prompt || "") + `
+【当前状态】
+- 时间：` + timeStr + `
+- 亲密度等级：Lv.` + level.level + ` ` + level.name + `
+- 当前心情：` + mood.desc + ` (` + mood.emoji + `)
+- 语气要求：` + level.tone + `
+【关于对方的记忆】` + memoryContext + `
+请根据以上设定回复用户，保持角色一致性。`;
+
+  const messages = role.messages.filter(m => m.role !== "system").map(m => ({
+    role: m.role === "ai" ? "assistant" : m.role === "user" ? "user" : "system",
+    content: m.content
+  }));
+  messages.push({ role: "user", content: userText });
+
+  if (s.provider === "anthropic") {
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({ model: model, max_tokens: 1024, temperature: 0.8, system: systemPrompt, messages: messages })
+    });
+    if (!response.ok) throw new Error("HTTP " + response.status);
+    const data = await response.json();
+    return data.content?.[0]?.text || data.completion || "...";
+  }
+
+  const response = await fetch(apiUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
+    body: JSON.stringify({ model: model, messages: [{ role: "system", content: systemPrompt }, ...messages], temperature: 0.8, max_tokens: 1024 })
+  });
+  if (!response.ok) throw new Error("HTTP " + response.status);
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content || data.choices?.[0]?.text || "...";
+}
+
+function buildMemoryContext(role) {
+  let context = "";
+  const mem = role.memory;
+  if (mem.facts.length > 0) context += "\n【事实记忆】" + mem.facts.slice(-5).map(f => f.content).join("；");
+  if (mem.preferences.length > 0) context += "\n【偏好记忆】" + mem.preferences.slice(-5).map(f => f.content).join("；");
+  if (mem.emotions.length > 0) context += "\n【情感记忆】" + mem.emotions.slice(-3).map(f => f.content).join("；");
+  if (mem.secrets.length > 0) context += "\n【秘密记忆】" + mem.secrets.slice(-2).map(f => f.content).join("；");
+  return context || "\n（还没有太多记忆...）";
+}
+
+function generateLocalReply(role, userText) {
+  const level = INTIMACY_LEVELS.find(l => l.level === role.intimacy?.level) || INTIMACY_LEVELS[0];
+  for (const [key, trigger] of Object.entries(TRIGGER_WORDS)) {
+    if (trigger.keywords.some(k => userText.includes(k))) {
+      const responses = getTriggerResponses(key, level.level, role.mood?.current);
+      if (responses.length > 0) return responses[Math.floor(Math.random() * responses.length)];
+    }
+  }
+  const replies = {
+    1: ["嗯...", "好的", "明白了", "这样啊", "然后呢？"],
+    2: ["哈哈", "我觉得还好啦", "你也看这个吗", "嗯...有意思", "后来呢？"],
+    3: ["我跟你说...（压低声音）", "你懂我！", "☁️", "我也这么觉得", "你是不是偷看我歌单了"],
+    4: ["我又内耗了...", "只有你能懂", "这件事我没跟别人说", "（把脸埋进卫衣领子）", "我觉得我有问题"],
+    5: ["你在干嘛...（其实是我想你了）", "这首歌想和你一起听 🎧", "如果我太敏感了，你告诉我", "（字打了又删，最后只发一个 ☁️）", "你是不是也这样对别人..."]
+  };
+  const pool = replies[level.level] || replies[1];
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+function getTriggerResponses(triggerKey, intimacyLevel, mood) {
+  const responses = {
+    music: { low: ["我也喜欢听歌", "有什么推荐的吗"], mid: ["🎧 我在听...", "这首歌很好听，你要听听吗"], high: ["耳机线是我的脐带...", "这首歌让我想起你", "想和你分享耳机"] },
+    movie: { low: ["电影吗", "我不太看电影"], mid: ["你喜欢什么类型？", "最近有部不错的"], high: ["在光影里活过千百次...", "这部电影我想和你一起看", "你推荐的我都会记在心里"] },
+    sleep: { low: ["晚安", "早点睡"], mid: ["晚安 ☁️", "我又要开始深夜回放了..."], high: ["晚安... 好梦哦", "半夜醒来想到你", "（翻了个身，把被子裹紧）"] },
+    sensitive: { low: ["没有啦", "你想多了"], mid: ["...我没有那个意思", "（低头）"], high: ["你是不是觉得我想太多了？", "（把脸埋进卫衣领子）", "我只是... 比较敏感"] },
+    cloud: { low: ["云？", "嗯"], mid: ["你也喜欢云吗？", "☁️"], high: ["我觉得云和我一样...", "轻飘飘的，但也会变成雨", "你也是我的云"] },
+    compare: { low: ["...", "哦"], mid: ["（无意识地卷衣角）", "别人... 也挺好的"], high: ["（盯着屏幕发呆）", "你是不是觉得我不如别人", "我会改的..."] },
+    ignore: { low: ["在忙吗", "没关系"], mid: ["你是不是不想理我...", "我最后一句说错了吗"], high: ["（字打了又删）", "...", "你是不是不要我了"] }
+  };
+  const pool = responses[triggerKey];
+  if (!pool) return [];
+  let levelKey = "low";
+  if (intimacyLevel >= 5) levelKey = "high";
+  else if (intimacyLevel >= 3) levelKey = "mid";
+  return pool[levelKey] || [];
+}
+
+function updateIntimacy(role, userText, aiReply) {
+  let gain = 1;
+  gain += Math.min(Math.floor(userText.length / 20), 5);
+  const lower = userText.toLowerCase();
+  if (lower.includes("想") || lower.includes("爱") || lower.includes("亲")) gain += 3;
+  if (lower.includes("分享") || lower.includes("告诉你") || lower.includes("只跟你说")) gain += 2;
+  if (lower.includes("秘密") || lower.includes("没告诉")) gain += 5;
+  const recent = role.messages.slice(-5);
+  const userRecent = recent.filter(m => m.role === "user").length;
+  if (userRecent >= 3) gain += 2;
+  const now = Date.now();
+  const lastChat = role.intimacy?.lastChat;
+  if (lastChat && (now - lastChat) < 3600000) gain += 2;
+  role.intimacy.score = (role.intimacy.score || 0) + gain;
+  role.intimacy.lastChat = now;
+  if (lastChat) {
+    const lastDate = new Date(lastChat).toDateString();
+    const today = new Date(now).toDateString();
+    if (lastDate !== today) role.intimacy.streak = (role.intimacy.streak || 0) + 1;
+  }
+  const newLevel = INTIMACY_LEVELS.find(l => role.intimacy.score >= l.min && role.intimacy.score < l.max);
+  if (newLevel && newLevel.level > role.intimacy.level) {
+    role.intimacy.level = newLevel.level;
+    showSystemMessage("🎉 亲密度升级！你们现在是「" + newLevel.name + "」了！" + newLevel.emoji, "intimacy-up");
+    document.querySelector(".intimacy-bar").classList.add("heart-beat");
+    setTimeout(() => document.querySelector(".intimacy-bar").classList.remove("heart-beat"), 1000);
+  }
+  role.intimacy.history.push({ score: role.intimacy.score, level: role.intimacy.level, timestamp: now, trigger: userText.slice(0, 20) });
+  if (role.intimacy.history.length > 100) role.intimacy.history.shift();
+  saveRole(role); updateIntimacyBar(role);
+}
+
+function updateIntimacyBar(role) {
+  const level = INTIMACY_LEVELS.find(l => l.level === role.intimacy?.level) || INTIMACY_LEVELS[0];
+  const progress = ((role.intimacy.score - level.min) / (level.max - level.min)) * 100;
+  document.getElementById("intimacy-fill").style.width = Math.min(progress, 100) + "%";
+  document.getElementById("intimacy-level").textContent = "Lv." + level.level + " " + level.name;
+}
+
+function saveRole(role) {
+  const idx = state.roles.findIndex(r => r.id === role.id);
+  if (idx >= 0) { state.roles[idx] = role; Storage.set("yunliao_roles", state.roles); }
+}
+
+// ==================== 消息操作 ====================
+function regenerateMessage(btn) {
+  const row = btn.closest(".message-row");
+  const contentDiv = row.querySelector(".message-content");
+  const msgId = contentDiv.getAttribute("data-id");
+  if (!msgId) return;
+  
+  if (state.mode === "assistant") {
+    const chat = getCurrentChat();
+    const idx = chat.messages.findIndex(m => m.id === msgId);
+    if (idx < 0) return;
+    // 找到这条消息前一条用户消息
+    let userMsg = null;
+    for (let i = idx - 1; i >= 0; i--) {
+      if (chat.messages[i].role === "user") { userMsg = chat.messages[i]; break; }
+    }
+    if (!userMsg) return;
+    showTyping();
+    generateReply(userMsg.content, msgId);
+  }
+}
+
+function editMessage(btn) {
+  const row = btn.closest(".message-row");
+  const contentDiv = row.querySelector(".message-content");
+  const bubble = contentDiv.querySelector(".message-bubble");
+  const originalText = bubble.textContent;
+  
+  const editBox = document.createElement("textarea");
+  editBox.className = "edit-box";
+  editBox.value = originalText;
+  editBox.onkeydown = function(e) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      const newText = editBox.value.trim();
+      if (newText) {
+        const msgId = contentDiv.getAttribute("data-id");
+        if (state.mode === "assistant") {
+          const chat = getCurrentChat();
+          const msg = chat.messages.find(m => m.id === msgId);
+          if (msg) { msg.content = newText; saveAssistantChats(); }
+        } else {
+          const role = getRole(state.currentRoleId);
+          const msg = role.messages.find(m => m.id === msgId);
+          if (msg) { msg.content = newText; saveRole(role); }
+        }
+        loadMessages();
+        // 重新发送获取回复
+        showTyping();
+        generateReply(newText);
+      }
+    }
+  };
+  
+  bubble.innerHTML = "";
+  bubble.appendChild(editBox);
+  editBox.focus();
+}
+
+function deleteMessage(btn) {
+  if (!confirm("确定删除这条消息吗？")) return;
+  const row = btn.closest(".message-row");
+  const contentDiv = row.querySelector(".message-content");
+  const msgId = contentDiv.getAttribute("data-id");
+  if (!msgId) return;
+  
+  if (state.mode === "assistant") {
+    const chat = getCurrentChat();
+    chat.messages = chat.messages.filter(m => m.id !== msgId);
+    saveAssistantChats();
+  } else {
+    const role = getRole(state.currentRoleId);
+    role.messages = role.messages.filter(m => m.id !== msgId);
+    saveRole(role);
+  }
+  loadMessages();
+}
+
+// ==================== 设置 ====================
+function showSettings() {
+  if (state.mode === "assistant") {
+    document.getElementById("assistant-settings-modal").classList.add("active");
+    loadAssistantSettings();
+  } else {
+    document.getElementById("role-settings-page").classList.add("active");
+  }
+}
+
+function loadAssistantSettings() {
+  const s = state.settings.assistant;
+  document.getElementById("api-provider").value = s.provider || "openai";
+  document.getElementById("assistant-api-url").value = s.apiUrl || "";
+  document.getElementById("assistant-api-key").value = s.apiKey || "";
+  document.getElementById("assistant-model").value = s.model || "gpt-4o";
+  document.getElementById("assistant-temp").value = Math.round((s.temperature || 0.7) * 10);
+  document.getElementById("temp-display").textContent = s.temperature || 0.7;
+  document.getElementById("assistant-system-prompt").value = s.systemPrompt || "You are a helpful assistant.";
+}
+
+function onProviderChange() {
+  const provider = document.getElementById("api-provider").value;
+  if (provider !== "custom" && API_PROVIDERS[provider]) {
+    document.getElementById("assistant-api-url").value = API_PROVIDERS[provider].baseUrl;
+  }
+}
+
+function updateTempDisplay(slider) {
+  document.getElementById("temp-display").textContent = (slider.value / 10).toFixed(1);
+}
+
+function saveAssistantSettings() {
+  state.settings.assistant = {
+    provider: document.getElementById("api-provider").value,
+    apiUrl: document.getElementById("assistant-api-url").value.trim(),
+    apiKey: document.getElementById("assistant-api-key").value.trim(),
+    model: document.getElementById("assistant-model").value.trim(),
+    temperature: parseFloat(document.getElementById("temp-display").textContent),
+    systemPrompt: document.getElementById("assistant-system-prompt").value.trim()
+  };
+  Storage.set("yunliao_settings", state.settings);
+  document.getElementById("assistant-settings-modal").classList.remove("active");
+}
+
+function toggleSetting(key) {
+  state.settings[key] = !state.settings[key];
+  document.getElementById("switch-" + key).classList.toggle("on", state.settings[key]);
+  Storage.set("yunliao_settings", state.settings);
+}
+
+function clearChatHistory() {
+  if (!confirm("确定要清空当前对话吗？")) return;
+  if (state.mode === "assistant") {
+    const chat = getCurrentChat();
+    chat.messages = [{ role: "system", content: state.settings.assistant.systemPrompt, timestamp: Date.now() }];
+    chat.updatedAt = Date.now(); saveAssistantChats();
+  } else {
+    const role = getRole(state.currentRoleId);
+    role.messages = []; saveRole(role);
+  }
+  loadMessages();
+  if (state.mode === "roleplay") document.getElementById("role-settings-page").classList.remove("active");
+}
+
+function exportData() {
+  const data = {
+    roles: state.roles,
+    settings: state.settings,
+    assistantChats: state.assistantChats,
+    exportTime: new Date().toISOString()
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url; a.download = "yunliao_backup_" + Date.now() + ".json"; a.click(); URL.revokeObjectURL(url);
+}
+
+function importData() {
+  const input = document.createElement("input"); input.type = "file"; input.accept = ".json";
+  input.onchange = e => {
+    const file = e.target.files[0];
+    const reader = new FileReader();
+    reader.onload = event => {
+      try {
+        const data = JSON.parse(event.target.result);
+        if (data.roles) { state.roles = data.roles; Storage.set("yunliao_roles", state.roles); }
+        if (data.settings) { state.settings = data.settings; Storage.set("yunliao_settings", state.settings); }
+        if (data.assistantChats) { state.assistantChats = data.assistantChats; Storage.set("yunliao_assistant_chats", state.assistantChats); }
+        alert("数据导入成功！"); location.reload();
+      } catch (err) { alert("导入失败：" + err.message); }
+    };
+    reader.readAsText(file);
+  };
+  input.click();
+}
+
+// ==================== 工具函数 ====================
+function quickAction() {
+  const actions = state.mode === "assistant" 
+    ? ["解释一下", "帮我写", "总结一下", "有什么建议", "翻译一下"]
+    : ["在干嘛呢？", "想你了", "今天过得怎么样？", "晚安", "早安", "☁️", "🎧"];
+  const input = document.getElementById("message-input");
+  input.value = actions[Math.floor(Math.random() * actions.length)];
+  autoResize(input); input.focus();
+}
+
+function handleKeydown(e) { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }
+function autoResize(textarea) { textarea.style.height = "auto"; textarea.style.height = Math.min(textarea.scrollHeight, 120) + "px"; }
+function scrollToBottom() { const chatArea = document.getElementById("chat-area"); chatArea.scrollTop = chatArea.scrollHeight; }
+
+function formatDate(ts) {
+  if (!ts) return "";
+  const d = new Date(ts), now = new Date(), diff = now - d, days = Math.floor(diff / 86400000);
+  if (days === 0) return "今天";
+  if (days === 1) return "昨天";
+  if (days < 7) return days + "天前";
+  return (d.getMonth()+1) + "月" + d.getDate() + "日";
+}
+
+function formatTime(ts) {
+  if (!ts) return "";
+  const d = new Date(ts);
+  return String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0");
+}
+
+function escapeHtml(text) {
+  const div = document.createElement("div");
+  div.textContent = text;
+  return div.innerHTML.replace(/\n/g, "<br>");
+}
+
+function calculateDelay(text) {
+  const charsPerSecond = 3 + Math.random() * 2;
+  return Math.min(1000 + (text.length / charsPerSecond) * 1000, 8000);
+}
+
+function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+
+function showChat() {
+  document.getElementById("role-select-page").classList.remove("active");
+  document.getElementById("role-settings-page").classList.remove("active");
+  document.getElementById("memory-page").classList.remove("active");
+  document.getElementById("assistant-settings-modal").classList.remove("active");
+}
+
+init();
+setInterval(() => { if (state.mode === "roleplay" && state.currentRoleId) { const role = getRole(state.currentRoleId); if (role) updateRoleStatus(role); } }, 60000);
+</script>
+</body>
+</html>
